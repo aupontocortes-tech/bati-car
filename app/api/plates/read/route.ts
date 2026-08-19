@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     if (!isLocation(location)) {
       return NextResponse.json({ error: 'Informe o local da leitura.' }, { status: 400 })
     }
-    if (!(upload instanceof File) || upload.size === 0) {
+    if (!(upload instanceof Blob) || upload.size === 0) {
       return NextResponse.json({ error: 'Envie uma foto da placa.' }, { status: 400 })
     }
 

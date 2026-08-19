@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, CarFront, Check, ChevronRight, FileText, Flashlight, History, MapPin, Plus, Settings2, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { emptyPlates, groupPlates, LOCATIONS, type Location, type Plate } from '@/lib/plates'
+import { playAlreadyBeep, playScanBeep, unlockBeep } from '@/lib/beep'
 import { flashLabel, getVideoTrack, nextFlashMode, sampleLuma, setTorch, supportsTorch, type FlashMode } from '@/lib/torch'
 
-type Notice = { kind: 'already' | 'error'; text: string }
+type Notice = { kind: 'already' | 'error' | 'ok'; text: string }
 
 export default function Page() {
   const [location, setLocation] = useState<Location>('Loja')
@@ -23,7 +24,10 @@ export default function Page() {
   const streamRef = useRef<MediaStream | null>(null)
   const flashModeRef = useRef<FlashMode>('auto')
   const lumaCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const locationRef = useRef(location)
+  const busyRef = useRef(false)
   flashModeRef.current = flashMode
+  locationRef.current = location
 
   const currentPlates = plates[location]
   const total = useMemo(() => plates.Loja.length + plates['Lava-jato'].length, [plates])
@@ -86,6 +90,20 @@ export default function Page() {
     return () => window.clearInterval(timer)
   }, [cameraOpen, hasTorch])
 
+  useEffect(() => {
+    if (!cameraOpen) return
+    const timer = window.setInterval(() => {
+      if (!busyRef.current) void captureFrame(true)
+    }, 1600)
+    const start = window.setTimeout(() => {
+      if (!busyRef.current) void captureFrame(true)
+    }, 700)
+    return () => {
+      window.clearInterval(timer)
+      window.clearTimeout(start)
+    }
+  }, [cameraOpen])
+
   function stopCamera() {
     const track = getVideoTrack(streamRef.current)
     void setTorch(track, false)
@@ -98,6 +116,7 @@ export default function Page() {
 
   async function openCamera() {
     setNotice(null)
+    await unlockBeep()
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -115,15 +134,15 @@ export default function Page() {
     }
   }
 
-  async function captureFrame() {
+  async function captureFrame(quiet = false) {
     const video = videoRef.current
     const track = getVideoTrack(streamRef.current)
-    if (!video || video.readyState < 2) return
+    if (!video || video.readyState < 2 || busyRef.current) return
 
     const lumaCanvas = lumaCanvasRef.current ?? document.createElement('canvas')
     lumaCanvasRef.current = lumaCanvas
     const luma = sampleLuma(video, lumaCanvas)
-    const needsBurst = flashMode === 'on' || (flashMode === 'auto' && (luma == null || luma < 90))
+    const needsBurst = flashModeRef.current === 'on' || (flashModeRef.current === 'auto' && (luma == null || luma < 90))
     if (needsBurst && supportsTorch(track)) {
       await setTorch(track, true)
       setTorchOn(true)
@@ -136,38 +155,46 @@ export default function Page() {
     photo.width = Math.round((video.videoWidth || maxWidth) * scale)
     photo.height = Math.round((video.videoHeight || 720) * scale)
     photo.getContext('2d')?.drawImage(video, 0, 0, photo.width, photo.height)
-    const blob = await new Promise<Blob | null>((resolve) => photo.toBlob(resolve, 'image/jpeg', 0.85))
-    if (blob) await sendRead(new File([blob], 'placa.jpg', { type: 'image/jpeg' }))
+    const blob = await new Promise<Blob | null>((resolve) => photo.toBlob(resolve, 'image/jpeg', 0.9))
+    if (blob) await sendRead(new File([blob], 'placa.jpg', { type: 'image/jpeg' }), quiet)
   }
 
-  async function sendRead(file: File) {
+  async function sendRead(file: File, quiet = false) {
+    if (busyRef.current) return
+    busyRef.current = true
     setIsCapturing(true)
-    setNotice(null)
+    if (!quiet) setNotice(null)
     try {
       const form = new FormData()
       form.append('upload', file)
-      form.append('location', location)
+      form.append('location', locationRef.current)
       const response = await fetch('/api/plates/read', { method: 'POST', body: form })
       const data = await response.json() as { plate?: Plate; duplicate?: boolean; error?: string }
 
       if (response.status === 409 && data.plate) {
+        await playAlreadyBeep()
         setNotice({ kind: 'already', text: `Placa ${data.plate.value} já foi lida hoje.` })
         return
       }
+      if (response.status === 422 && quiet) return
       if (!response.ok) {
         setNotice({ kind: 'error', text: data.error || 'Não foi possível ler a placa.' })
         return
       }
 
+      await playScanBeep()
+      if (data.plate) setNotice({ kind: 'ok', text: `Placa ${data.plate.value} lida.` })
       await refreshPlates()
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Falha na leitura.' })
     } finally {
+      busyRef.current = false
       setIsCapturing(false)
     }
   }
 
   async function addManual() {
+    await unlockBeep()
     const value = window.prompt('Digite a placa')
     if (!value) return
     setNotice(null)
@@ -179,6 +206,7 @@ export default function Page() {
       })
       const data = await response.json() as { plate?: Plate; duplicate?: boolean; error?: string }
       if (response.status === 409 && data.plate) {
+        await playAlreadyBeep()
         setNotice({ kind: 'already', text: `Placa ${data.plate.value} já foi lida hoje.` })
         return
       }
@@ -186,6 +214,8 @@ export default function Page() {
         setNotice({ kind: 'error', text: data.error || 'Não foi possível salvar a placa.' })
         return
       }
+      await playScanBeep()
+      if (data.plate) setNotice({ kind: 'ok', text: `Placa ${data.plate.value} lida.` })
       await refreshPlates()
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Falha ao salvar.' })
@@ -257,7 +287,7 @@ export default function Page() {
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-2 p-3">
-                  <button onClick={() => void captureFrame()} disabled={isCapturing} className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-70">
+                  <button onClick={() => void captureFrame(false)} disabled={isCapturing} className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-70">
                     {isCapturing ? 'Lendo placa...' : 'Ler esta placa'}
                   </button>
                   <button onClick={stopCamera} className="rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white">Fechar câmera</button>
@@ -280,11 +310,11 @@ export default function Page() {
             </div>
             <input ref={fileRef} onChange={onUpload} type="file" accept="image/*" capture="environment" className="sr-only" />
             {notice && (
-              <p role="status" className={`mt-4 rounded-xl border px-3 py-2 text-sm font-semibold ${notice.kind === 'already' ? 'border-primary/30 bg-primary/10 text-primary' : 'border-destructive/30 bg-destructive/10 text-destructive'}`}>
+              <p role="status" className={`mt-4 rounded-xl border px-3 py-2 text-sm font-semibold ${notice.kind === 'error' ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-primary/30 bg-primary/10 text-primary'}`}>
                 {notice.text}
               </p>
             )}
-            <div className="mt-5 flex items-start gap-3 rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground"><Sparkles size={16} className="mt-0.5 shrink-0 text-primary" /> No dia, cada placa entra uma vez. O flash do celular acende sozinho no escuro e apaga à luz do dia, para não estourar a placa. Toque em Flash auto para ligar ou desligar na mão.</div>
+            <div className="mt-5 flex items-start gap-3 rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground"><Sparkles size={16} className="mt-0.5 shrink-0 text-primary" /> Com a câmera aberta, aponte para a placa. O app lê sozinho e dá um beep quando entra. Placa já lida hoje não entra de novo.</div>
           </section>
 
           <section className="rounded-3xl border border-border bg-card p-5 shadow-sm md:p-7">
