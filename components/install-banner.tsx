@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Download, Share, X } from 'lucide-react'
+import { CarFront, Download, Share, X } from 'lucide-react'
 
 const STORAGE_KEY = 'bati-car-hide-install'
 
@@ -59,7 +59,9 @@ export function InstallBanner() {
   return (
     <div className="fixed inset-x-0 bottom-4 z-[60] flex justify-center px-4">
       <div className="flex w-full max-w-md items-start gap-3 rounded-2xl border border-primary/20 bg-card p-4 shadow-2xl">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground">BC</div>
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <CarFront size={22} strokeWidth={2.4} />
+        </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold">Baixar o Bati Car</p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
