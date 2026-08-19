@@ -5,7 +5,7 @@ import { Camera, CarFront, Check, ChevronRight, FileText, Flashlight, History, M
 import { emptyPlates, groupPlates, LOCATIONS, type Location, type Plate } from '@/lib/plates'
 import { playAlreadyBeep, playScanBeep, unlockBeep } from '@/lib/beep'
 import { cropPlateFrame, detectPlateAim } from '@/lib/plate-detect'
-import { getVideoTrack, setTorch, supportsTorch } from '@/lib/torch'
+import { ClosingReports } from '@/components/closing-reports'
 
 type Notice = { kind: 'already' | 'error' | 'ok'; text: string }
 
@@ -17,6 +17,7 @@ export default function Page() {
   const [hasTorch, setHasTorch] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showClosing, setShowClosing] = useState(false)
   const [notice, setNotice] = useState<Notice | null>(null)
   const [loading, setLoading] = useState(true)
   const [aiming, setAiming] = useState(false)
@@ -216,7 +217,8 @@ export default function Page() {
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
+    <>
+    <main className="no-print min-h-screen overflow-x-hidden bg-background text-foreground">
       <div className="mx-auto min-h-screen w-full max-w-[480px] bg-background shadow-sm md:max-w-6xl">
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-5 md:px-8">
@@ -319,16 +321,16 @@ export default function Page() {
               ))}
             </div>
             {!loading && currentPlates.length === 0 && <div className="py-12 text-center text-sm text-muted-foreground">Nenhuma placa neste local hoje.</div>}
-            <button onClick={() => setShowSettings(true)} className="mt-5 flex w-full items-center justify-between rounded-xl bg-muted px-4 py-3 text-sm font-semibold transition hover:bg-accent"><span className="flex items-center gap-2"><History size={17} /> Ver fechamento da contagem</span><ChevronRight size={17} /></button>
+            <button onClick={() => setShowClosing(true)} className="mt-5 flex w-full items-center justify-between rounded-xl bg-muted px-4 py-3 text-sm font-semibold transition hover:bg-accent"><span className="flex items-center gap-2"><History size={17} /> Ver fechamento da contagem</span><ChevronRight size={17} /></button>
           </section>
         </div>
 
         <section className="mt-6 flex flex-col items-start justify-between gap-4 rounded-3xl border border-primary/20 bg-primary/5 p-5 md:flex-row md:items-center md:px-7">
           <div>
             <p className="flex items-center gap-2 text-sm font-bold text-primary"><FileText size={17} /> Relatório da operação</p>
-            <p className="mt-1 text-sm text-muted-foreground">Gere um PDF com Loja, Lava-jato e todas as placas contadas hoje.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Bate físico no estilo da planilha e relatório com placas grandes para o grupo da loja.</p>
           </div>
-          <button onClick={() => window.print()} className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition hover:bg-primary/90"><FileText size={17} /> Fechar e gerar PDF</button>
+          <button onClick={() => setShowClosing(true)} className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition hover:bg-primary/90"><FileText size={17} /> Fechar e gerar PDF</button>
         </section>
       </div>
       </div>
@@ -353,5 +355,7 @@ export default function Page() {
         </div>
       )}
     </main>
+      {showClosing && <ClosingReports plates={plates} onClose={() => setShowClosing(false)} />}
+    </>
   )
 }

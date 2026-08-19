@@ -67,4 +67,9 @@ button { cursor: pointer; touch-action: manipulation; }
 @media (min-width: 640px) {
   body { padding: 1rem; }
 }
-@media print { header, button, input, .sr-only { display: none !important; } main { background: white; } }
+@media print {
+  header, button, input, .sr-only, .no-print { display: none !important; }
+  html, body { background: white !important; padding: 0 !important; }
+  .print-sheet { display: block !important; }
+  .print-root { position: static !important; inset: auto !important; overflow: visible !important; background: white !important; }
+}

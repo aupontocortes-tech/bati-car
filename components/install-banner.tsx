@@ -57,7 +57,7 @@ export function InstallBanner() {
   if (!visible) return null
 
   return (
-    <div className="fixed inset-x-0 bottom-4 z-[60] flex justify-center px-4">
+    <div className="no-print fixed inset-x-0 bottom-4 z-[60] flex justify-center px-4">
       <div className="flex w-full max-w-md items-start gap-3 rounded-2xl border border-primary/20 bg-card p-4 shadow-2xl">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
           <CarFront size={22} strokeWidth={2.4} />
