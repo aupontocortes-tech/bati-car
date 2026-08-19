@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, CarFront, Check, ChevronRight, FileText, Flashlight, History, MapPin, Plus, Settings2, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { emptyPlates, groupPlates, LOCATIONS, type Location, type Plate } from '@/lib/plates'
 import { playAlreadyBeep, playScanBeep, unlockBeep } from '@/lib/beep'
+import { cropPlateFrame, detectPlateAim } from '@/lib/plate-detect'
 import { getVideoTrack, setTorch, supportsTorch } from '@/lib/torch'
 
 type Notice = { kind: 'already' | 'error' | 'ok'; text: string }
@@ -18,11 +19,14 @@ export default function Page() {
   const [showSettings, setShowSettings] = useState(false)
   const [notice, setNotice] = useState<Notice | null>(null)
   const [loading, setLoading] = useState(true)
+  const [aiming, setAiming] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const locationRef = useRef(location)
   const busyRef = useRef(false)
+  const hitsRef = useRef(0)
+  const lastReadAtRef = useRef(0)
   locationRef.current = location
 
   const currentPlates = plates[location]
@@ -46,17 +50,29 @@ export default function Page() {
   }, [])
 
   useEffect(() => {
-    if (!cameraOpen) return
-    const timer = window.setInterval(() => {
-      if (!busyRef.current) void captureFrame(true)
-    }, 1000)
-    const start = window.setTimeout(() => {
-      if (!busyRef.current) void captureFrame(true)
-    }, 400)
-    return () => {
-      window.clearInterval(timer)
-      window.clearTimeout(start)
+    if (!cameraOpen) {
+      setAiming(false)
+      hitsRef.current = 0
+      return
     }
+    const timer = window.setInterval(() => {
+      const video = videoRef.current
+      if (!video || video.readyState < 2 || busyRef.current) return
+      if (Date.now() - lastReadAtRef.current < 1000) return
+
+      const aim = detectPlateAim(video)
+      setAiming(aim.found)
+      if (!aim.found) {
+        hitsRef.current = 0
+        return
+      }
+
+      hitsRef.current += 1
+      if (hitsRef.current < 2 && aim.score < 1.8) return
+      hitsRef.current = 0
+      void captureFrame(true, aim.box)
+    }, 220)
+    return () => window.clearInterval(timer)
   }, [cameraOpen])
 
   function stopCamera() {
@@ -67,6 +83,7 @@ export default function Page() {
     setCameraOpen(false)
     setHasTorch(false)
     setTorchOn(false)
+    setAiming(false)
   }
 
   async function openCamera() {
@@ -97,17 +114,20 @@ export default function Page() {
     setTorchOn(next && on)
   }
 
-  async function captureFrame(quiet = false) {
+  async function captureFrame(quiet = false, box?: { x: number; y: number; w: number; h: number } | null) {
     const video = videoRef.current
     if (!video || video.readyState < 2 || busyRef.current) return
 
-    const maxWidth = 1280
-    const scale = Math.min(1, maxWidth / (video.videoWidth || maxWidth))
-    const photo = document.createElement('canvas')
-    photo.width = Math.round((video.videoWidth || maxWidth) * scale)
-    photo.height = Math.round((video.videoHeight || 720) * scale)
-    photo.getContext('2d')?.drawImage(video, 0, 0, photo.width, photo.height)
-    const blob = await new Promise<Blob | null>((resolve) => photo.toBlob(resolve, 'image/jpeg', 0.9))
+    const photo = box ? cropPlateFrame(video, { ...box, score: 1 }) : (() => {
+      const canvas = document.createElement('canvas')
+      const maxWidth = 1280
+      const scale = Math.min(1, maxWidth / (video.videoWidth || maxWidth))
+      canvas.width = Math.round((video.videoWidth || maxWidth) * scale)
+      canvas.height = Math.round((video.videoHeight || 720) * scale)
+      canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height)
+      return canvas
+    })()
+    const blob = await new Promise<Blob | null>((resolve) => photo.toBlob(resolve, 'image/jpeg', 0.92))
     if (blob) await sendRead(new File([blob], 'placa.jpg', { type: 'image/jpeg' }), quiet)
   }
 
@@ -126,9 +146,13 @@ export default function Page() {
       if (response.status === 409 && data.plate) {
         await playAlreadyBeep()
         setNotice({ kind: 'already', text: `Placa ${data.plate.value} já foi lida hoje.` })
+        lastReadAtRef.current = Date.now()
         return
       }
-      if (response.status === 422 && quiet) return
+      if (response.status === 422 && quiet) {
+        lastReadAtRef.current = Date.now()
+        return
+      }
       if (!response.ok) {
         setNotice({ kind: 'error', text: data.error || 'Não foi possível ler a placa.' })
         return
@@ -136,6 +160,7 @@ export default function Page() {
 
       await playScanBeep()
       if (data.plate) setNotice({ kind: 'ok', text: `Placa ${data.plate.value} lida.` })
+      lastReadAtRef.current = Date.now()
       await refreshPlates()
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Falha na leitura.' })
@@ -239,6 +264,9 @@ export default function Page() {
                       {torchOn ? 'Flash ligado' : 'Toque na tela para o flash'}
                     </div>
                   )}
+                  <p className={`pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-1.5 text-xs font-bold ${aiming ? 'bg-emerald-400 text-black' : 'bg-black/55 text-white'}`}>
+                    {isCapturing ? 'Lendo placa...' : aiming ? 'Placa na mira' : 'Aponte para a placa'}
+                  </p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 p-3">
                   <button onClick={() => void captureFrame(false)} disabled={isCapturing} className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-70">
@@ -268,7 +296,7 @@ export default function Page() {
                 {notice.text}
               </p>
             )}
-            <div className="mt-5 flex items-start gap-3 rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground"><Sparkles size={16} className="mt-0.5 shrink-0 text-primary" /> Só Mercosul do Brasil (ABC1D23). Lê a cada 1 segundo. O flash só liga se você tocar na tela da câmera.</div>
+            <div className="mt-5 flex items-start gap-3 rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground"><Sparkles size={16} className="mt-0.5 shrink-0 text-primary" /> Só lê quando reconhece uma placa Mercosul na mira. Andar com a câmera ligada sem apontar não gasta leitura. Flash: toque na tela.</div>
           </section>
 
           <section className="rounded-3xl border border-border bg-card p-5 shadow-sm md:p-7">
