@@ -26,6 +26,8 @@ export async function POST(request: Request) {
     const result = await addPlate({ value: body.value, location: body.location, status: 'Manual' })
     return NextResponse.json(result, { status: result.duplicate ? 409 : 201 })
   } catch (error) {
-    return errorResponse(error)
+    const message = error instanceof Error ? error.message : 'Erro interno.'
+    const status = message.includes('Mercosul') ? 400 : 500
+    return NextResponse.json({ error: message }, { status })
   }
 }

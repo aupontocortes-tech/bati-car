@@ -1,5 +1,5 @@
 import { ensurePlatesTable } from '@/lib/db'
-import { formatReadTime, isLocation, normalizePlate, todayKey, type Location, type Plate, type PlateStatus } from '@/lib/plates'
+import { formatReadTime, isLocation, isMercosulPlate, normalizePlate, todayKey, type Location, type Plate, type PlateStatus } from '@/lib/plates'
 
 type PlateRow = {
   id: number
@@ -38,8 +38,8 @@ export async function addPlate(input: { value: string; location: string; status:
   }
 
   const value = normalizePlate(input.value)
-  if (value.length < 6) {
-    throw new Error('Placa inválida.')
+  if (!isMercosulPlate(value)) {
+    throw new Error('Só entram placas Mercosul do Brasil, no formato ABC1D23.')
   }
 
   const db = await ensurePlatesTable()

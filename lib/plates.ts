@@ -20,6 +20,10 @@ export function normalizePlate(value: string) {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7)
 }
 
+export function isMercosulPlate(value: string) {
+  return /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/.test(normalizePlate(value))
+}
+
 export function isLocation(value: string): value is Location {
   return LOCATIONS.includes(value as Location)
 }

@@ -314,7 +314,7 @@ export default function Page() {
                 {notice.text}
               </p>
             )}
-            <div className="mt-5 flex items-start gap-3 rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground"><Sparkles size={16} className="mt-0.5 shrink-0 text-primary" /> Com a câmera aberta, aponte para a placa. O app lê sozinho e dá um beep quando entra. Placa já lida hoje não entra de novo.</div>
+            <div className="mt-5 flex items-start gap-3 rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground"><Sparkles size={16} className="mt-0.5 shrink-0 text-primary" /> Só placas Mercosul do Brasil (ABC1D23). A cinza antiga não entra. Aponte a câmera: lê sozinho e dá beep.</div>
           </section>
 
           <section className="rounded-3xl border border-border bg-card p-5 shadow-sm md:p-7">

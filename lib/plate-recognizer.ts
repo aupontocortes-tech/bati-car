@@ -1,3 +1,5 @@
+import { isMercosulPlate, normalizePlate } from '@/lib/plates'
+
 type RecognizerResult = {
   plate?: string
   score?: number
@@ -23,11 +25,11 @@ function bestPlate(results: RecognizerResult[]) {
       { plate: result.plate, score: result.score ?? result.dscore ?? 0 },
       ...(result.candidates ?? []).map((candidate) => ({ plate: candidate.plate, score: candidate.score ?? 0 })),
     ]
-    return options.filter((option) => option.plate)
+    return options.filter((option) => option.plate && isMercosulPlate(option.plate ?? ''))
   }).sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
   const winner = ranked[0]
   if (!winner?.plate || (winner.score ?? 0) < 0.25) return null
-  return winner.plate
+  return normalizePlate(winner.plate)
 }
 
 export async function readPlateFromImage(file: Blob) {
