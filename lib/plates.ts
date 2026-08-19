@@ -12,6 +12,10 @@ export type Plate = {
 
 export const LOCATIONS: Location[] = ['Loja', 'Lava-jato']
 
+export function todayKey() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+}
+
 export function isDateKey(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
