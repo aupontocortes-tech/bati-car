@@ -1,8 +1,10 @@
-const CACHE = 'bati-car-v2'
+const CACHE = 'bati-car-v3'
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(['/', '/icon-192.png', '/icon-512.png']))
+    caches.open(CACHE).then((cache) =>
+      Promise.all(['/', '/icon-192.png', '/icon-512.png'].map((url) => cache.add(url).catch(() => undefined)))
+    )
   )
   self.skipWaiting()
 })

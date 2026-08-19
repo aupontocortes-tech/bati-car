@@ -6,6 +6,7 @@ import { emptyPlates, formatDayLabel, groupPlates, LOCATIONS, todayKey, type Loc
 import { playAlreadyBeep, playScanBeep, unlockBeep } from '@/lib/beep'
 import { cropPlateFrame, detectPlateAim } from '@/lib/plate-detect'
 import { ClosingReports } from '@/components/closing-reports'
+import { InstallBanner } from '@/components/install-banner'
 import { getVideoTrack, setTorch, supportsTorch } from '@/lib/torch'
 
 type Notice = { kind: 'already' | 'error' | 'ok'; text: string }
@@ -252,6 +253,7 @@ export default function Page() {
           </button>
         </div>
       </header>
+      <InstallBanner />
 
       <div className="mx-auto max-w-6xl px-4 pb-8 pt-4 sm:px-5 sm:pb-12 sm:pt-5 md:px-8">
         <section className="mb-4 flex items-center justify-between gap-3">
