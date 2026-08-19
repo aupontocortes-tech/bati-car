@@ -1,8 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, CarFront, Check, ChevronRight, FileText, Flashlight, History, MapPin, Plus, Settings2, Sparkles, Trash2, Upload, X } from 'lucide-react'
-import { emptyPlates, groupPlates, LOCATIONS, type Location, type Plate } from '@/lib/plates'
+import { Camera, CarFront, Check, ChevronRight, FileText, Flashlight, History, MapPin, Plus, Sparkles, Trash2, Upload, X } from 'lucide-react'
+import { emptyPlates, formatDayLabel, groupPlates, LOCATIONS, todayKey, type Location, type Plate } from '@/lib/plates'
 import { playAlreadyBeep, playScanBeep, unlockBeep } from '@/lib/beep'
 import { cropPlateFrame, detectPlateAim } from '@/lib/plate-detect'
 import { ClosingReports } from '@/components/closing-reports'
@@ -19,6 +19,8 @@ export default function Page() {
   const [torchOn, setTorchOn] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showClosing, setShowClosing] = useState(false)
+  const [selectedDate, setSelectedDate] = useState(todayKey)
+  const [deletingDay, setDeletingDay] = useState(false)
   const [notice, setNotice] = useState<Notice | null>(null)
   const [loading, setLoading] = useState(true)
   const [aiming, setAiming] = useState(false)
@@ -31,15 +33,16 @@ export default function Page() {
   const lastReadAtRef = useRef(0)
   locationRef.current = location
 
+  const isToday = selectedDate === todayKey()
   const currentPlates = plates[location]
   const total = useMemo(() => plates.Loja.length + plates['Lava-jato'].length, [plates])
 
   const refreshPlates = useCallback(async () => {
-    const response = await fetch('/api/plates')
+    const response = await fetch(`/api/plates?date=${selectedDate}`)
     const data = await response.json() as { plates?: Plate[]; error?: string }
     if (!response.ok) throw new Error(data.error || 'Não foi possível carregar as placas.')
     setPlates(groupPlates(data.plates ?? []))
-  }, [])
+  }, [selectedDate])
 
   useEffect(() => {
     refreshPlates()
@@ -217,6 +220,23 @@ export default function Page() {
     if (file) void sendRead(file)
   }
 
+  async function deleteDay() {
+    if (!window.confirm(`Excluir o Bati Car de ${formatDayLabel(selectedDate)}? Isso apaga as placas desse dia no banco.`)) return
+    setDeletingDay(true)
+    try {
+      const response = await fetch(`/api/plates?date=${selectedDate}`, { method: 'DELETE' })
+      const data = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(data.error || 'Não foi possível excluir o dia.')
+      await refreshPlates()
+      setNotice({ kind: 'ok', text: `Bati Car de ${formatDayLabel(selectedDate)} excluído.` })
+      setShowSettings(false)
+    } catch (error) {
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Falha ao excluir.' })
+    } finally {
+      setDeletingDay(false)
+    }
+  }
+
   return (
     <>
     <main className="no-print min-h-screen overflow-x-hidden bg-background text-foreground">
@@ -227,13 +247,15 @@ export default function Page() {
             <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"><CarFront size={22} strokeWidth={2.4} /></div>
             <div><p className="font-mono text-xs font-bold uppercase tracking-[0.18em] text-primary">Bati Car</p><p className="text-xs text-muted-foreground">Contagem de pátio</p></div>
           </div>
-          <button aria-label="Abrir configurações" onClick={() => setShowSettings(true)} className="flex size-10 items-center justify-center rounded-xl border border-border text-muted-foreground transition hover:bg-accent hover:text-foreground"><Settings2 size={19} /></button>
+          <button aria-label="Abrir dias do Bati Car" onClick={() => setShowSettings(true)} className="flex h-10 items-center gap-2 rounded-xl border border-border px-3 text-sm font-bold text-foreground transition hover:bg-accent">
+            {formatDayLabel(selectedDate)}
+          </button>
         </div>
       </header>
 
       <div className="mx-auto max-w-6xl px-4 pb-8 pt-4 sm:px-5 sm:pb-12 sm:pt-5 md:px-8">
         <section className="mb-4 flex items-center justify-between gap-3">
-          <p className="flex items-center gap-2 text-sm font-semibold text-primary"><span className="size-2 rounded-full bg-primary" /> Contagem em andamento</p>
+          <p className="flex items-center gap-2 text-sm font-semibold text-primary"><span className="size-2 rounded-full bg-primary" /> {isToday ? 'Contagem em andamento' : `Bati Car ${formatDayLabel(selectedDate)}`}</p>
           <div className="flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-primary-foreground">
             <div>
               <p className="text-[10px] font-medium text-primary-foreground/70">Total do dia</p>
@@ -256,6 +278,8 @@ export default function Page() {
           <section className="rounded-3xl border border-border bg-card p-5 shadow-sm md:p-7">
             <div className="mb-5 flex items-center justify-between"><div><h2 className="text-lg font-bold">Nova leitura</h2><p className="mt-1 text-sm text-muted-foreground">Local selecionado: <span className="font-semibold text-foreground">{location}</span></p></div><div className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">Plate Recognizer</div></div>
 
+            {isToday ? (
+            <>
             {cameraOpen ? (
               <div className="overflow-hidden rounded-2xl bg-black">
                 <div className="relative">
@@ -294,12 +318,20 @@ export default function Page() {
                 </div>
               </button>
             )}
+            </>
+            ) : (
+              <div className="rounded-2xl border border-border bg-muted/50 px-4 py-10 text-center text-sm text-muted-foreground">
+                Você está vendo o dia {formatDayLabel(selectedDate)}. Volte para hoje para ler placas novas.
+              </div>
+            )}
 
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <button onClick={() => fileRef.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-semibold transition hover:bg-accent"><Upload size={17} /> Enviar foto</button>
-              <button onClick={() => void addManual()} className="flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-semibold transition hover:bg-accent"><Plus size={17} /> Digitar placa</button>
-            </div>
-            <input ref={fileRef} onChange={onUpload} type="file" accept="image/*" capture="environment" className="sr-only" />
+            {isToday && (
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <button onClick={() => fileRef.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-semibold transition hover:bg-accent"><Upload size={17} /> Enviar foto</button>
+                <button onClick={() => void addManual()} className="flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-semibold transition hover:bg-accent"><Plus size={17} /> Digitar placa</button>
+                <input ref={fileRef} onChange={onUpload} type="file" accept="image/*" capture="environment" className="sr-only" />
+              </div>
+            )}
             {notice && (
               <p role="status" className={`mt-4 rounded-xl border px-3 py-2 text-sm font-semibold ${notice.kind === 'error' ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-primary/30 bg-primary/10 text-primary'}`}>
                 {notice.text}
@@ -310,7 +342,7 @@ export default function Page() {
 
           <section className="rounded-3xl border border-border bg-card p-5 shadow-sm md:p-7">
             <div className="mb-5 flex items-center justify-between">
-              <div><h2 className="text-lg font-bold">Placas em {location}</h2><p className="mt-1 text-sm text-muted-foreground">Leituras de hoje no Neon</p></div>
+              <div><h2 className="text-lg font-bold">Placas em {location}</h2><p className="mt-1 text-sm text-muted-foreground">{isToday ? 'Leituras de hoje no Neon' : `Leituras de ${formatDayLabel(selectedDate)}`}</p></div>
               <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-bold text-primary">{currentPlates.length} carros</span>
             </div>
             <div className="space-y-2">
@@ -327,7 +359,7 @@ export default function Page() {
                 </div>
               ))}
             </div>
-            {!loading && currentPlates.length === 0 && <div className="py-12 text-center text-sm text-muted-foreground">Nenhuma placa neste local hoje.</div>}
+            {!loading && currentPlates.length === 0 && <div className="py-12 text-center text-sm text-muted-foreground">Nenhuma placa neste local neste dia.</div>}
             <button onClick={() => setShowClosing(true)} className="mt-5 flex w-full items-center justify-between rounded-xl bg-muted px-4 py-3 text-sm font-semibold transition hover:bg-accent"><span className="flex items-center gap-2"><History size={17} /> Ver fechamento da contagem</span><ChevronRight size={17} /></button>
           </section>
         </div>
@@ -346,18 +378,25 @@ export default function Page() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/30 p-4 md:items-center">
           <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-3xl bg-card p-6 shadow-2xl">
             <div className="mb-6 flex items-center justify-between">
-              <div><h2 className="text-xl font-bold">Configurar contagem</h2><p className="mt-1 text-sm text-muted-foreground">Prepare a próxima operação.</p></div>
+              <div>
+                <h2 className="text-xl font-bold">Dias do Bati Car</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Veja um dia, ou apague para liberar o banco.</p>
+              </div>
               <button aria-label="Fechar" onClick={() => setShowSettings(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-accent"><X size={19} /></button>
             </div>
-            <div className="space-y-3">
-              {LOCATIONS.map((item) => (
-                <button key={item} onClick={() => { setLocation(item); setShowSettings(false) }} className="flex w-full items-center justify-between rounded-2xl border border-border p-4 text-left hover:bg-accent">
-                  <span><p className="font-bold">{item}</p><p className="text-xs text-muted-foreground">{plates[item].length} carros contados hoje</p></span>
-                  <ChevronRight size={18} />
-                </button>
-              ))}
-            </div>
-            <button onClick={() => setShowSettings(false)} className="mt-6 w-full rounded-xl border border-border py-3 text-sm font-semibold">Concluir</button>
+            <label className="mb-3 block text-sm font-semibold">Data</label>
+            <input
+              type="date"
+              value={selectedDate}
+              max={todayKey()}
+              onChange={(event) => setSelectedDate(event.target.value)}
+              className="mb-4 w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold"
+            />
+            <p className="mb-4 text-xs leading-5 text-muted-foreground">O app não guarda foto. Só o número da placa. Depois de 7 dias, o Bati Car antigo some sozinho.</p>
+            <button onClick={() => void deleteDay()} disabled={deletingDay} className="w-full rounded-xl bg-destructive px-4 py-3 text-sm font-bold text-white disabled:opacity-70">
+              {deletingDay ? 'Excluindo...' : `Excluir Bati Car de ${formatDayLabel(selectedDate)}`}
+            </button>
+            <button onClick={() => { setSelectedDate(todayKey()); setShowSettings(false) }} className="mt-3 w-full rounded-xl border border-border py-3 text-sm font-semibold">Ir para hoje</button>
           </div>
         </div>
       )}

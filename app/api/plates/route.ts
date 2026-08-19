@@ -1,16 +1,30 @@
 import { NextResponse } from 'next/server'
-import { addPlate, listTodayPlates } from '@/lib/plate-db'
-import { isLocation } from '@/lib/plates'
+import { addPlate, deletePlatesByDate, listPlatesByDate } from '@/lib/plate-db'
+import { isDateKey, isLocation, todayKey } from '@/lib/plates'
 
 function errorResponse(error: unknown, status = 500) {
   const message = error instanceof Error ? error.message : 'Erro interno.'
   return NextResponse.json({ error: message }, { status })
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const plates = await listTodayPlates()
-    return NextResponse.json({ plates })
+    const date = new URL(request.url).searchParams.get('date') || todayKey()
+    const plates = await listPlatesByDate(date)
+    return NextResponse.json({ plates, date, today: todayKey() })
+  } catch (error) {
+    return errorResponse(error, 503)
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const date = new URL(request.url).searchParams.get('date') || ''
+    if (!isDateKey(date)) {
+      return NextResponse.json({ error: 'Informe a data.' }, { status: 400 })
+    }
+    await deletePlatesByDate(date)
+    return NextResponse.json({ ok: true })
   } catch (error) {
     return errorResponse(error, 503)
   }

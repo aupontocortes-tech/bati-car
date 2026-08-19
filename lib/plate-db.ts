@@ -1,5 +1,5 @@
 import { ensurePlatesTable } from '@/lib/db'
-import { formatReadTime, isLocation, isMercosulPlate, normalizePlate, todayKey, type Location, type Plate, type PlateStatus } from '@/lib/plates'
+import { formatReadTime, isDateKey, isLocation, isMercosulPlate, normalizePlate, shiftDateKey, todayKey, type Location, type Plate, type PlateStatus } from '@/lib/plates'
 
 type PlateRow = {
   id: number
@@ -22,14 +22,27 @@ function toPlate(row: PlateRow): Plate {
   }
 }
 
-export async function listTodayPlates() {
+export async function purgeOldPlates() {
   const db = await ensurePlatesTable()
-  const date = todayKey()
+  const cutoff = shiftDateKey(todayKey(), -7)
+  await db`DELETE FROM plates WHERE read_on < ${cutoff}`
+}
+
+export async function listPlatesByDate(date = todayKey()) {
+  await purgeOldPlates()
+  const day = isDateKey(date) ? date : todayKey()
+  const db = await ensurePlatesTable()
   const rows = await db`SELECT id, value, location, status, read_on::text, read_at::text
     FROM plates
-    WHERE read_on = ${date}
+    WHERE read_on = ${day}
     ORDER BY read_at DESC` as PlateRow[]
   return rows.map(toPlate)
+}
+
+export async function deletePlatesByDate(date: string) {
+  if (!isDateKey(date)) throw new Error('Data inválida.')
+  const db = await ensurePlatesTable()
+  await db`DELETE FROM plates WHERE read_on = ${date}`
 }
 
 export async function addPlate(input: { value: string; location: string; status: PlateStatus }) {

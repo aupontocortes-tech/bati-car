@@ -12,8 +12,19 @@ export type Plate = {
 
 export const LOCATIONS: Location[] = ['Loja', 'Lava-jato']
 
-export function todayKey() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+export function isDateKey(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+}
+
+export function formatDayLabel(key: string) {
+  const [year, month, day] = key.split('-')
+  return `${day}/${month}`
+}
+
+export function shiftDateKey(key: string, days: number) {
+  const [year, month, day] = key.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day + days))
+  return date.toISOString().slice(0, 10)
 }
 
 export function normalizePlate(value: string) {
