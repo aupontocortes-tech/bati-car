@@ -70,6 +70,6 @@ button { cursor: pointer; touch-action: manipulation; }
 @media print {
   header, button, input, .sr-only, .no-print { display: none !important; }
   html, body { background: white !important; padding: 0 !important; }
-  .print-sheet { display: block !important; }
+  .print-sheet { display: table !important; width: 100% !important; }
   .print-root { position: static !important; inset: auto !important; overflow: visible !important; background: white !important; }
 }

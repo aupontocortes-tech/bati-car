@@ -334,10 +334,10 @@ export default function Page() {
 
         <section className="mt-6 flex flex-col items-start justify-between gap-4 rounded-3xl border border-primary/20 bg-primary/5 p-5 md:flex-row md:items-center md:px-7">
           <div>
-            <p className="flex items-center gap-2 text-sm font-bold text-primary"><FileText size={17} /> Relatório da operação</p>
-            <p className="mt-1 text-sm text-muted-foreground">Bate físico no estilo da planilha e relatório com placas grandes para o grupo da loja.</p>
+            <p className="flex items-center gap-2 text-sm font-bold text-primary"><FileText size={17} /> Área do PDF</p>
+            <p className="mt-1 text-sm text-muted-foreground">Planilha LAVA JATO e UNIDAS, letras grandes, para PDF, Excel e o grupo da loja.</p>
           </div>
-          <button onClick={() => setShowClosing(true)} className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition hover:bg-primary/90"><FileText size={17} /> Fechar e gerar PDF</button>
+          <button onClick={() => setShowClosing(true)} className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition hover:bg-primary/90"><FileText size={17} /> Abrir PDF / planilha</button>
         </section>
       </div>
       </div>

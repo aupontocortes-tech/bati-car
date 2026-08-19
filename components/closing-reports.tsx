@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { FileText, Share2, X } from 'lucide-react'
+import { FileSpreadsheet, FileText, Share2, X } from 'lucide-react'
 import { type Location, type Plate } from '@/lib/plates'
 
 function pad(n: number) {
@@ -28,6 +28,29 @@ function shareMessage(loja: string[], lava: string[], shift: string, date: strin
   ].join('\n')
 }
 
+function downloadSheet(loja: string[], lava: string[], filename: string) {
+  const max = Math.max(loja.length, lava.length, 1)
+  const cells = (value: string, header = false) =>
+    `<td style="border:1px solid #c7c7c7;padding:10px 8px;font-family:Arial,Helvetica,sans-serif;font-size:${header ? 22 : 28}px;font-weight:700;letter-spacing:${header ? 0 : 2}px;color:#000">${value}</td>`
+
+  const rows = [
+    `<tr>${cells('LAVA JATO', true)}${cells('UNIDAS', true)}</tr>`,
+    `<tr>${cells('')}${cells('')}</tr>`,
+  ]
+  for (let index = 0; index < max; index += 1) {
+    rows.push(`<tr>${cells(lava[index] ?? '')}${cells(loja[index] ?? '')}</tr>`)
+  }
+
+  const html = `\uFEFF<html><head><meta charset="UTF-8"></head><body><table>${rows.join('')}</table></body></html>`
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${filename}.xls`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 export function ClosingReports({
   plates,
   onClose,
@@ -40,10 +63,10 @@ export function ClosingReports({
   const lava = useMemo(() => plateValues(plates['Lava-jato']), [plates['Lava-jato']])
   const stamp = fileStamp()
   const maxRows = Math.max(loja.length, lava.length, 1)
+  const title = `Bate físico ${shift} ${stamp}`
   const text = shareMessage(loja, lava, shift, stamp)
 
   async function share() {
-    const title = `Bate físico ${shift} ${stamp}`
     if (navigator.share) {
       try {
         await navigator.share({ title, text })
@@ -57,51 +80,62 @@ export function ClosingReports({
 
   function printSheet() {
     const previous = document.title
-    document.title = `Bate fisico ${shift} ${stamp}`
+    document.title = title
     window.print()
     document.title = previous
   }
 
   return (
-    <div className="print-root fixed inset-0 z-[70] overflow-y-auto bg-white">
+    <div className="print-root fixed inset-0 z-[70] overflow-y-auto bg-[#f8f9fa]">
       <div className="no-print sticky top-0 z-10 border-b border-border bg-card px-4 py-3">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-bold">Bate físico</p>
-            <p className="text-xs text-muted-foreground">Mesma estrutura da planilha da loja, com letras grandes</p>
+            <p className="text-sm font-bold">Área do PDF / planilha</p>
+            <p className="text-xs text-muted-foreground">Igual à planilha da loja: LAVA JATO e UNIDAS, com letras grandes para conferir e digitar depois</p>
           </div>
           <button aria-label="Fechar" onClick={onClose} className="rounded-lg p-2 hover:bg-accent"><X size={18} /></button>
         </div>
-        <div className="mx-auto mt-3 flex max-w-3xl gap-2">
+        <div className="mx-auto mt-3 flex max-w-4xl gap-2">
           <button onClick={() => setShift('DIA')} className={`flex-1 rounded-xl px-3 py-2 text-sm font-bold ${shift === 'DIA' ? 'bg-primary text-primary-foreground' : 'border border-border'}`}>Dia</button>
           <button onClick={() => setShift('NOITE')} className={`flex-1 rounded-xl px-3 py-2 text-sm font-bold ${shift === 'NOITE' ? 'bg-primary text-primary-foreground' : 'border border-border'}`}>Noite</button>
         </div>
-        <div className="mx-auto mt-2 flex max-w-3xl gap-2">
-          <button onClick={() => void share()} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border py-3 text-sm font-bold"><Share2 size={16} /> Mandar no grupo</button>
-          <button onClick={printSheet} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground"><FileText size={16} /> Salvar PDF</button>
+        <div className="mx-auto mt-2 grid max-w-4xl grid-cols-3 gap-2">
+          <button onClick={() => void share()} className="flex items-center justify-center gap-1 rounded-xl border border-border py-3 text-xs font-bold"><Share2 size={15} /> Grupo</button>
+          <button onClick={() => downloadSheet(loja, lava, title)} className="flex items-center justify-center gap-1 rounded-xl border border-border py-3 text-xs font-bold"><FileSpreadsheet size={15} /> Excel</button>
+          <button onClick={printSheet} className="flex items-center justify-center gap-1 rounded-xl bg-primary py-3 text-xs font-bold text-primary-foreground"><FileText size={15} /> PDF</button>
         </div>
       </div>
 
-      <div className="mx-auto max-w-3xl px-3 py-5">
-        <div className="print-sheet bg-white text-black">
-          <p className="mb-3 text-center text-lg font-black">Bate físico {shift} {stamp}</p>
-          <div className="grid grid-cols-2">
-            <div className="border-r border-black">
-              <p className="px-2 py-3 text-left text-xl font-black">LAVA JATO</p>
-              <div className="h-4" />
-              {Array.from({ length: maxRows }).map((_, index) => (
-                <p key={`lava-${lava[index] ?? index}`} className="px-2 py-2 font-mono text-[28px] font-black leading-none tracking-wide">{lava[index] ?? ''}</p>
-              ))}
-            </div>
-            <div>
-              <p className="px-2 py-3 text-left text-xl font-black">UNIDAS</p>
-              <div className="h-4" />
-              {Array.from({ length: maxRows }).map((_, index) => (
-                <p key={`loja-${loja[index] ?? index}`} className="px-2 py-2 font-mono text-[28px] font-black leading-none tracking-wide">{loja[index] ?? ''}</p>
-              ))}
-            </div>
-          </div>
-        </div>
+      <div className="mx-auto max-w-4xl overflow-x-auto px-2 py-4">
+        <p className="no-print mb-2 px-1 text-sm font-semibold text-neutral-600">{title}.xlsx</p>
+        <table className="print-sheet w-full min-w-[520px] border-collapse bg-white text-black">
+          <thead>
+            <tr>
+              <th className="w-10 border border-[#c7c7c7] bg-[#f8f9fa] py-1 text-[11px] font-medium text-neutral-500" />
+              <th className="border border-[#c7c7c7] bg-[#f8f9fa] py-1 text-[11px] font-medium text-neutral-500">A</th>
+              <th className="border border-[#c7c7c7] bg-[#f8f9fa] py-1 text-[11px] font-medium text-neutral-500">B</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border border-[#c7c7c7] bg-[#f8f9fa] text-center text-[11px] text-neutral-500">1</td>
+              <td className="border border-[#c7c7c7] px-3 py-3 text-left font-sans text-[26px] font-bold tracking-tight">LAVA JATO</td>
+              <td className="border border-[#c7c7c7] px-3 py-3 text-left font-sans text-[26px] font-bold tracking-tight">UNIDAS</td>
+            </tr>
+            <tr>
+              <td className="border border-[#c7c7c7] bg-[#f8f9fa] text-center text-[11px] text-neutral-500">2</td>
+              <td className="border border-[#c7c7c7] h-10" />
+              <td className="border border-[#c7c7c7]" />
+            </tr>
+            {Array.from({ length: maxRows }).map((_, index) => (
+              <tr key={`row-${index}`}>
+                <td className="border border-[#c7c7c7] bg-[#f8f9fa] text-center text-[11px] text-neutral-500">{index + 3}</td>
+                <td className="border border-[#c7c7c7] px-3 py-3 text-left font-sans text-[32px] font-bold leading-none tracking-[0.14em] text-black">{lava[index] ?? ''}</td>
+                <td className="border border-[#c7c7c7] px-3 py-3 text-left font-sans text-[32px] font-bold leading-none tracking-[0.14em] text-black">{loja[index] ?? ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )
