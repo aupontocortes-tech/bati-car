@@ -6,6 +6,7 @@ import { emptyPlates, groupPlates, LOCATIONS, type Location, type Plate } from '
 import { playAlreadyBeep, playScanBeep, unlockBeep } from '@/lib/beep'
 import { cropPlateFrame, detectPlateAim } from '@/lib/plate-detect'
 import { ClosingReports } from '@/components/closing-reports'
+import { getVideoTrack, setTorch, supportsTorch } from '@/lib/torch'
 
 type Notice = { kind: 'already' | 'error' | 'ok'; text: string }
 
