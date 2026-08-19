@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, CarFront, Check, ChevronRight, FileText, Flashlight, History, MapPin, Plus, Settings2, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { emptyPlates, groupPlates, LOCATIONS, type Location, type Plate } from '@/lib/plates'
 import { playAlreadyBeep, playScanBeep, unlockBeep } from '@/lib/beep'
-import { flashLabel, getVideoTrack, nextFlashMode, sampleLuma, setTorch, supportsTorch, type FlashMode } from '@/lib/torch'
+import { getVideoTrack, setTorch, supportsTorch } from '@/lib/torch'
 
 type Notice = { kind: 'already' | 'error' | 'ok'; text: string }
 
@@ -13,7 +13,6 @@ export default function Page() {
   const [plates, setPlates] = useState(emptyPlates)
   const [isCapturing, setIsCapturing] = useState(false)
   const [cameraOpen, setCameraOpen] = useState(false)
-  const [flashMode, setFlashMode] = useState<FlashMode>('auto')
   const [hasTorch, setHasTorch] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -22,11 +21,8 @@ export default function Page() {
   const fileRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const flashModeRef = useRef<FlashMode>('auto')
-  const lumaCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const locationRef = useRef(location)
   const busyRef = useRef(false)
-  flashModeRef.current = flashMode
   locationRef.current = location
 
   const currentPlates = plates[location]
@@ -50,54 +46,13 @@ export default function Page() {
   }, [])
 
   useEffect(() => {
-    if (!cameraOpen || !hasTorch) return
-    const canvas = lumaCanvasRef.current ?? document.createElement('canvas')
-    lumaCanvasRef.current = canvas
-    let timer = 0
-
-    const tick = async () => {
-      const video = videoRef.current
-      const track = getVideoTrack(streamRef.current)
-      const mode = flashModeRef.current
-      if (!video || !track) return
-
-      if (mode === 'on') {
-        const on = await setTorch(track, true)
-        setTorchOn(on)
-        return
-      }
-      if (mode === 'off') {
-        await setTorch(track, false)
-        setTorchOn(false)
-        return
-      }
-
-      const luma = sampleLuma(video, canvas)
-      if (luma == null) return
-      const shouldLight = luma < 58
-      const shouldDim = luma > 102
-      if (shouldLight) {
-        const on = await setTorch(track, true)
-        setTorchOn(on)
-      } else if (shouldDim) {
-        await setTorch(track, false)
-        setTorchOn(false)
-      }
-    }
-
-    timer = window.setInterval(() => void tick(), 450)
-    void tick()
-    return () => window.clearInterval(timer)
-  }, [cameraOpen, hasTorch])
-
-  useEffect(() => {
     if (!cameraOpen) return
     const timer = window.setInterval(() => {
       if (!busyRef.current) void captureFrame(true)
-    }, 1600)
+    }, 1000)
     const start = window.setTimeout(() => {
       if (!busyRef.current) void captureFrame(true)
-    }, 700)
+    }, 400)
     return () => {
       window.clearInterval(timer)
       window.clearTimeout(start)
@@ -134,20 +89,17 @@ export default function Page() {
     }
   }
 
+  async function toggleFlash() {
+    const track = getVideoTrack(streamRef.current)
+    if (!supportsTorch(track)) return
+    const next = !torchOn
+    const on = next ? await setTorch(track, true) : await setTorch(track, false)
+    setTorchOn(next && on)
+  }
+
   async function captureFrame(quiet = false) {
     const video = videoRef.current
-    const track = getVideoTrack(streamRef.current)
     if (!video || video.readyState < 2 || busyRef.current) return
-
-    const lumaCanvas = lumaCanvasRef.current ?? document.createElement('canvas')
-    lumaCanvasRef.current = lumaCanvas
-    const luma = sampleLuma(video, lumaCanvas)
-    const needsBurst = flashModeRef.current === 'on' || (flashModeRef.current === 'auto' && (luma == null || luma < 90))
-    if (needsBurst && supportsTorch(track)) {
-      await setTorch(track, true)
-      setTorchOn(true)
-      await new Promise((resolve) => window.setTimeout(resolve, 180))
-    }
 
     const maxWidth = 1280
     const scale = Math.min(1, maxWidth / (video.videoWidth || maxWidth))
@@ -273,17 +225,19 @@ export default function Page() {
             {cameraOpen ? (
               <div className="overflow-hidden rounded-2xl bg-black">
                 <div className="relative">
-                  <video ref={videoRef} autoPlay playsInline muted className="aspect-[4/3] w-full object-cover" />
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    onClick={() => void toggleFlash()}
+                    className="aspect-[4/3] w-full object-cover"
+                  />
                   {hasTorch && (
-                    <button
-                      type="button"
-                      onClick={() => setFlashMode((mode) => nextFlashMode(mode))}
-                      className={`absolute right-3 top-3 flex items-center gap-2 rounded-full px-3 py-2 text-xs font-bold shadow-sm ${torchOn ? 'bg-amber-300 text-black' : 'bg-black/55 text-white'}`}
-                      aria-label={flashLabel(flashMode)}
-                    >
+                    <div className={`pointer-events-none absolute right-3 top-3 flex items-center gap-2 rounded-full px-3 py-2 text-xs font-bold shadow-sm ${torchOn ? 'bg-amber-300 text-black' : 'bg-black/55 text-white'}`}>
                       <Flashlight size={15} />
-                      {flashLabel(flashMode)}
-                    </button>
+                      {torchOn ? 'Flash ligado' : 'Toque na tela para o flash'}
+                    </div>
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-2 p-3">
@@ -314,7 +268,7 @@ export default function Page() {
                 {notice.text}
               </p>
             )}
-            <div className="mt-5 flex items-start gap-3 rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground"><Sparkles size={16} className="mt-0.5 shrink-0 text-primary" /> Só placas Mercosul do Brasil (ABC1D23). A cinza antiga não entra. Aponte a câmera: lê sozinho e dá beep.</div>
+            <div className="mt-5 flex items-start gap-3 rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground"><Sparkles size={16} className="mt-0.5 shrink-0 text-primary" /> Só Mercosul do Brasil (ABC1D23). Lê a cada 1 segundo. O flash só liga se você tocar na tela da câmera.</div>
           </section>
 
           <section className="rounded-3xl border border-border bg-card p-5 shadow-sm md:p-7">
