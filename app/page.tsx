@@ -231,10 +231,16 @@ export default function Page() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl px-4 pb-8 pt-6 sm:px-5 sm:pb-12 sm:pt-7 md:px-8">
-        <section className="mb-6 flex flex-col justify-between gap-4 sm:mb-7 sm:gap-5 md:flex-row md:items-end">
-          <div><p className="mb-2 flex items-center gap-2 text-sm font-semibold text-primary"><span className="size-2 rounded-full bg-primary" /> Contagem em andamento</p><h1 className="text-balance text-3xl font-bold tracking-tight md:text-4xl">Conte os carros sem perder nenhuma placa.</h1><p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">Aponte a câmera para a placa. O Bati Car reconhece, confere e organiza tudo por local.</p></div>
-          <div className="flex w-full items-center justify-between gap-3 rounded-2xl bg-primary px-4 py-3 text-primary-foreground sm:w-auto sm:px-5 sm:py-4"><div><p className="text-xs font-medium text-primary-foreground/70">Total do dia</p><p className="text-3xl font-bold">{loading ? '—' : total}</p></div><CarFront size={28} className="opacity-80" /></div>
+      <div className="mx-auto max-w-6xl px-4 pb-8 pt-4 sm:px-5 sm:pb-12 sm:pt-5 md:px-8">
+        <section className="mb-4 flex items-center justify-between gap-3">
+          <p className="flex items-center gap-2 text-sm font-semibold text-primary"><span className="size-2 rounded-full bg-primary" /> Contagem em andamento</p>
+          <div className="flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-primary-foreground">
+            <div>
+              <p className="text-[10px] font-medium text-primary-foreground/70">Total do dia</p>
+              <p className="text-2xl font-bold leading-none">{loading ? '—' : total}</p>
+            </div>
+            <CarFront size={22} className="opacity-80" />
+          </div>
         </section>
 
         <div className="mb-6 flex rounded-2xl border border-border bg-card p-1.5 shadow-sm" role="tablist" aria-label="Local da contagem">
