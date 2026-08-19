@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Copy, FileSpreadsheet, FileText, Share2, X } from 'lucide-react'
+import { Check, Copy, FileSpreadsheet, FileText, Share2, X } from 'lucide-react'
 import { type Location, type Plate } from '@/lib/plates'
 
 type View = 'loja' | 'visualizar'
@@ -29,6 +29,32 @@ function shareMessage(loja: string[], lava: string[], shift: string, date: strin
     'UNIDAS',
     ...loja,
   ].join('\n')
+}
+
+function PlateCopyRow({
+  value,
+  copied,
+  onCopy,
+}: {
+  value: string
+  copied: boolean
+  onCopy: (value: string) => void
+}) {
+  return (
+    <li className={`flex items-center gap-2 rounded-xl border px-3 py-3 ${copied ? 'border-emerald-400 bg-emerald-50' : 'border-neutral-300 bg-white'}`}>
+      <p className={`min-w-0 flex-1 font-mono text-[32px] font-bold leading-tight tracking-[0.12em] sm:text-[40px] ${copied ? 'text-emerald-700' : 'text-black'}`}>
+        {value}
+      </p>
+      <button
+        type="button"
+        aria-label={copied ? `Placa ${value} já copiada` : `Copiar placa ${value}`}
+        onClick={() => onCopy(value)}
+        className={`no-print flex size-11 shrink-0 items-center justify-center rounded-xl ${copied ? 'bg-emerald-600 text-white' : 'bg-primary text-primary-foreground'}`}
+      >
+        {copied ? <Check size={18} /> : <Copy size={18} />}
+      </button>
+    </li>
+  )
 }
 
 function downloadSheet(loja: string[], lava: string[], filename: string) {
@@ -61,6 +87,7 @@ export function ClosingReports({
   const [shift, setShift] = useState<Shift>(() => (new Date().getHours() >= 18 ? 'NOITE' : 'DIA'))
   const [view, setView] = useState<View>('loja')
   const [copied, setCopied] = useState(false)
+  const [copiedPlates, setCopiedPlates] = useState<Record<string, true>>({})
   const loja = useMemo(() => plateValues(plates.Loja), [plates.Loja])
   const lava = useMemo(() => plateValues(plates['Lava-jato']), [plates['Lava-jato']])
   const stamp = fileStamp()
@@ -94,6 +121,25 @@ export function ClosingReports({
       window.setTimeout(() => setCopied(false), 1600)
     } catch {
       setCopied(false)
+    }
+  }
+
+  async function copyPlate(value: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopiedPlates((current) => ({ ...current, [value]: true }))
+      return
+    } catch {
+      const input = document.createElement('textarea')
+      input.value = value
+      input.setAttribute('readonly', '')
+      input.style.position = 'fixed'
+      input.style.left = '-9999px'
+      document.body.appendChild(input)
+      input.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(input)
+      if (ok) setCopiedPlates((current) => ({ ...current, [value]: true }))
     }
   }
 
@@ -163,9 +209,7 @@ export function ClosingReports({
               <ul className="space-y-3">
                 {lava.length === 0 && <li className="text-sm text-neutral-500">Nenhuma placa</li>}
                 {lava.map((value) => (
-                  <li key={`lava-${value}`} className="rounded-xl border border-neutral-300 bg-white px-3 py-4 font-mono text-[40px] font-bold leading-tight tracking-[0.12em] text-black">
-                    {value}
-                  </li>
+                  <PlateCopyRow key={`lava-${value}`} value={value} copied={Boolean(copiedPlates[value])} onCopy={(plate) => void copyPlate(plate)} />
                 ))}
               </ul>
             </section>
@@ -174,9 +218,7 @@ export function ClosingReports({
               <ul className="space-y-3">
                 {loja.length === 0 && <li className="text-sm text-neutral-500">Nenhuma placa</li>}
                 {loja.map((value) => (
-                  <li key={`loja-${value}`} className="rounded-xl border border-neutral-300 bg-white px-3 py-4 font-mono text-[40px] font-bold leading-tight tracking-[0.12em] text-black">
-                    {value}
-                  </li>
+                  <PlateCopyRow key={`loja-${value}`} value={value} copied={Boolean(copiedPlates[value])} onCopy={(plate) => void copyPlate(plate)} />
                 ))}
               </ul>
             </section>
