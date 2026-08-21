@@ -1,18 +1,20 @@
 const VIEW_W = 160
 const VIEW_H = 90
 
-type Box = { x: number; y: number; w: number; h: number; score: number }
+export type Box = { x: number; y: number; w: number; h: number; score: number }
 
 const canvas = typeof document === 'undefined' ? null : document.createElement('canvas')
 
 export type PlateAim = {
   found: boolean
   score: number
+  sharpness: number
   box: Box | null
 }
 
+const empty: PlateAim = { found: false, score: 0, sharpness: 0, box: null }
+
 export function detectPlateAim(video: HTMLVideoElement): PlateAim {
-  const empty = { found: false, score: 0, box: null }
   if (!canvas || video.readyState < 2 || !video.videoWidth) return empty
 
   canvas.width = VIEW_W
@@ -48,8 +50,31 @@ export function detectPlateAim(video: HTMLVideoElement): PlateAim {
     }
   }
 
-  if (!best || best.score < 1) return empty
-  return { found: true, score: best.score, box: best }
+  if (!best || best.score < 1.35) return empty
+  const sharpness = boxSharpness(edge, best)
+  if (sharpness < 11) return empty
+  return { found: true, score: best.score, sharpness, box: best }
+}
+
+export function boxesAreStable(previous: Box | null, next: Box | null) {
+  if (!previous || !next) return false
+  const dx = Math.abs(previous.x - next.x)
+  const dy = Math.abs(previous.y - next.y)
+  const dw = Math.abs(previous.w - next.w)
+  const dh = Math.abs(previous.h - next.h)
+  return dx <= 10 && dy <= 8 && dw <= 14 && dh <= 8
+}
+
+function boxSharpness(edge: Float32Array, box: Box) {
+  let sum = 0
+  let count = 0
+  for (let row = 1; row < box.h - 1; row += 1) {
+    for (let col = 1; col < box.w - 1; col += 1) {
+      sum += edge[(box.y + row) * VIEW_W + (box.x + col)]
+      count += 1
+    }
+  }
+  return count ? sum / count : 0
 }
 
 function scoreWindow(
@@ -85,13 +110,13 @@ function scoreWindow(
   }
 
   const contrast = lumaMax - lumaMin
-  if (contrast < 28) return 0
+  if (contrast < 34) return 0
 
   const meanEdge = edgeSum / (width * height)
-  if (meanEdge < 9) return 0
+  if (meanEdge < 11) return 0
 
   const peaks = countPeaks(columns)
-  if (peaks < 5 || peaks > 10) return 0
+  if (peaks < 5 || peaks > 9) return 0
 
   const stripePixels = stripe * height
   const blue = stripePixels ? blueBoost / stripePixels : 0

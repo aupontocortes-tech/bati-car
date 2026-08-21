@@ -4,12 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, CarFront, Check, ChevronRight, FileText, Flashlight, History, MapPin, Plus, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { emptyPlates, formatDayLabel, groupPlates, LOCATIONS, todayKey, type Location, type Plate } from '@/lib/plates'
 import { playAlreadyBeep, playScanBeep, unlockBeep } from '@/lib/beep'
-import { cropPlateFrame, detectPlateAim } from '@/lib/plate-detect'
+import { boxesAreStable, cropPlateFrame, detectPlateAim, type Box } from '@/lib/plate-detect'
 import { ClosingReports } from '@/components/closing-reports'
 import { InstallBanner } from '@/components/install-banner'
 import { getVideoTrack, setTorch, supportsTorch } from '@/lib/torch'
 
 type Notice = { kind: 'already' | 'error' | 'ok'; text: string }
+type ScanMode = 'auto' | 'foto'
 
 export default function Page() {
   const [location, setLocation] = useState<Location>('Loja')
@@ -25,14 +26,18 @@ export default function Page() {
   const [notice, setNotice] = useState<Notice | null>(null)
   const [loading, setLoading] = useState(true)
   const [aiming, setAiming] = useState(false)
+  const [scanMode, setScanMode] = useState<ScanMode>('foto')
   const fileRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const locationRef = useRef(location)
   const busyRef = useRef(false)
   const hitsRef = useRef(0)
+  const lastBoxRef = useRef<Box | null>(null)
   const lastReadAtRef = useRef(0)
+  const scanModeRef = useRef(scanMode)
   locationRef.current = location
+  scanModeRef.current = scanMode
 
   const isToday = selectedDate === todayKey()
   const currentPlates = plates[location]
@@ -59,25 +64,42 @@ export default function Page() {
     if (!cameraOpen) {
       setAiming(false)
       hitsRef.current = 0
+      lastBoxRef.current = null
       return
     }
     const timer = window.setInterval(() => {
       const video = videoRef.current
       if (!video || video.readyState < 2 || busyRef.current) return
-      if (Date.now() - lastReadAtRef.current < 1000) return
 
       const aim = detectPlateAim(video)
-      setAiming(aim.found)
-      if (!aim.found) {
+      setAiming(aim.found && aim.sharpness >= 14)
+
+      if (scanModeRef.current !== 'auto') {
         hitsRef.current = 0
+        lastBoxRef.current = aim.box
         return
       }
 
+      if (Date.now() - lastReadAtRef.current < 2800) return
+
+      if (!aim.found || !aim.box || aim.score < 1.7 || aim.sharpness < 14) {
+        hitsRef.current = 0
+        lastBoxRef.current = null
+        return
+      }
+
+      if (!boxesAreStable(lastBoxRef.current, aim.box)) {
+        hitsRef.current = 1
+        lastBoxRef.current = aim.box
+        return
+      }
+
+      lastBoxRef.current = aim.box
       hitsRef.current += 1
-      if (hitsRef.current < 2 && aim.score < 1.8) return
+      if (hitsRef.current < 5) return
       hitsRef.current = 0
       void captureFrame(true, aim.box)
-    }, 220)
+    }, 260)
     return () => window.clearInterval(timer)
   }, [cameraOpen])
 
@@ -90,6 +112,8 @@ export default function Page() {
     setHasTorch(false)
     setTorchOn(false)
     setAiming(false)
+    hitsRef.current = 0
+    lastBoxRef.current = null
   }
 
   async function openCamera() {
@@ -97,12 +121,23 @@ export default function Page() {
     await unlockBeep()
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
         audio: false,
       })
       streamRef.current = stream
       const track = getVideoTrack(stream)
       setHasTorch(supportsTorch(track))
+      try {
+        await track?.applyConstraints({
+          advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet],
+        })
+      } catch {
+        // alguns celulares não aceitam focusMode
+      }
       setCameraOpen(true)
       requestAnimationFrame(() => {
         if (videoRef.current) videoRef.current.srcObject = stream
@@ -133,7 +168,7 @@ export default function Page() {
       canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height)
       return canvas
     })()
-    const blob = await new Promise<Blob | null>((resolve) => photo.toBlob(resolve, 'image/jpeg', 0.92))
+    const blob = await new Promise<Blob | null>((resolve) => photo.toBlob(resolve, 'image/jpeg', 0.95))
     if (blob) await sendRead(new File([blob], 'placa.jpg', { type: 'image/jpeg' }), quiet)
   }
 
@@ -282,6 +317,22 @@ export default function Page() {
 
             {isToday ? (
             <>
+            <div className="mb-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setScanMode('foto')}
+                className={`rounded-xl px-3 py-2.5 text-sm font-bold ${scanMode === 'foto' ? 'bg-primary text-primary-foreground' : 'border border-border text-foreground'}`}
+              >
+                Modo foto
+              </button>
+              <button
+                type="button"
+                onClick={() => setScanMode('auto')}
+                className={`rounded-xl px-3 py-2.5 text-sm font-bold ${scanMode === 'auto' ? 'bg-primary text-primary-foreground' : 'border border-border text-foreground'}`}
+              >
+                Automático
+              </button>
+            </div>
             {cameraOpen ? (
               <div className="overflow-hidden rounded-2xl bg-black">
                 <div className="relative">
@@ -300,12 +351,28 @@ export default function Page() {
                     </div>
                   )}
                   <p className={`pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-1.5 text-xs font-bold ${aiming ? 'bg-emerald-400 text-black' : 'bg-black/55 text-white'}`}>
-                    {isCapturing ? 'Lendo placa...' : aiming ? 'Placa na mira' : 'Aponte para a placa'}
+                    {isCapturing
+                      ? 'Lendo placa...'
+                      : aiming
+                        ? scanMode === 'foto'
+                          ? 'Nítida — toque em Tirar foto'
+                          : 'Placa nítida — aguardando...'
+                        : scanMode === 'foto'
+                          ? 'Aponte e espere ficar nítida'
+                          : 'Aponte e segure firme na placa'}
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 p-3">
-                  <button onClick={() => void captureFrame(false)} disabled={isCapturing} className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-70">
-                    {isCapturing ? 'Lendo placa...' : 'Ler esta placa'}
+                  <button
+                    onClick={() => {
+                      const video = videoRef.current
+                      const aim = video ? detectPlateAim(video) : null
+                      void captureFrame(false, aim?.found ? aim.box : null)
+                    }}
+                    disabled={isCapturing}
+                    className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-70"
+                  >
+                    {isCapturing ? 'Lendo placa...' : scanMode === 'foto' ? 'Tirar foto' : 'Ler agora'}
                   </button>
                   <button onClick={stopCamera} className="rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white">Fechar câmera</button>
                 </div>
@@ -316,7 +383,7 @@ export default function Page() {
                 <div className="flex size-16 items-center justify-center rounded-2xl bg-primary-foreground/15 ring-1 ring-primary-foreground/25 transition group-hover:scale-105">{isCapturing ? <Sparkles className="animate-pulse" size={30} /> : <Camera size={30} />}</div>
                 <div className="text-center">
                   <p className="text-lg font-bold">{isCapturing ? 'Lendo placa...' : 'Apontar câmera para a placa'}</p>
-                  <p className="mt-1 text-sm text-primary-foreground/70">{isCapturing ? 'Conferindo com Plate Recognizer' : 'Toque para iniciar uma leitura'}</p>
+                  <p className="mt-1 text-sm text-primary-foreground/70">{isCapturing ? 'Conferindo com Plate Recognizer' : scanMode === 'foto' ? 'Você decide quando tirar a foto' : 'Lê sozinho quando a placa estiver nítida'}</p>
                 </div>
               </button>
             )}
@@ -339,7 +406,7 @@ export default function Page() {
                 {notice.text}
               </p>
             )}
-            <div className="mt-5 flex items-start gap-3 rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground"><Sparkles size={16} className="mt-0.5 shrink-0 text-primary" /> Só lê quando reconhece uma placa Mercosul na mira. Andar com a câmera ligada sem apontar não gasta leitura. Flash: toque na tela.</div>
+            <div className="mt-5 flex items-start gap-3 rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground"><Sparkles size={16} className="mt-0.5 shrink-0 text-primary" /> {scanMode === 'foto' ? 'Modo foto: espere a placa ficar nítida (selo verde) e toque em Tirar foto. Assim o flash e o movimento não inventam placa.' : 'Automático: só lê se a placa ficar estável e nítida por ~1 segundo. Se estiver andando entre carros, use o modo foto.'}</div>
           </section>
 
           <section className="rounded-3xl border border-border bg-card p-5 shadow-sm md:p-7">
